@@ -24,6 +24,7 @@ def sat_from_tree(C: int, K: int, S: int, controller_tree: Tree, plant_tree: Tre
 def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K: int,  # controller
         S: int, V_plant: tuple, E_plant: tuple, E_in_plant: tuple, G_plant: tuple, O: tuple):  # plant
     print(len(O))
+    print(len(G_plant))
     # for v in V:
     #     print(v)
     #
@@ -350,15 +351,15 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K:
                 for s2 in range(0, S):
                     clauses.append([-x[u.i][s1], -x[v.i][s2], yp[s1][ei][gi][s2]])
 
-        for s1 in range(0, S):
-            for s2 in range(0, S):
-                for s3 in range(0, S):
-                    if s2 == s3:
-                        continue
-
-                    for ei in range(0, len(E_in_plant)):
-                        for gi in range(0, len(G_plant)):
-                            clauses.append([-yp[s1][ei][gi][s2], -yp[s1][ei][gi][s3]])
+        # for s1 in range(0, S):
+        #     for s2 in range(0, S):
+        #         for s3 in range(0, S):
+        #             if s2 == s3:
+        #                 continue
+        #
+        #             for ei in range(0, len(E_in_plant)):
+        #                 for gi in range(0, len(G_plant)):
+        #                     clauses.append([-yp[s1][ei][gi][s2], -yp[s1][ei][gi][s3]])
 
         # section 3 ----------------------------------------------------------------------------------------------------
 

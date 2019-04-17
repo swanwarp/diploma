@@ -175,7 +175,7 @@ class Tree:
             else:
                 s += v.e_out + str(v.i)
 
-            s += " [label = \"" + v.e_out + str(v.z) + "\"];\n"
+            s += " [label = \"" + v.e_out + str(v.i) + str(v.z) + "\"];\n"
 
             inp.write(s)
 

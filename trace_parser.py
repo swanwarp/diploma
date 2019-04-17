@@ -250,10 +250,11 @@ class TraceList:
                 #print(ei)
                 #print(eo)
 
+
                 next = None
 
                 for e in tree.E:
-                    if e.u == current and e.e_in == ei.name and e.x == ei.variables:
+                    if e.u == current and e.e_in == ei.name and e.x == ei.variables and eo.name == e.v.e_out and eo.variables == e.v.z:
                         next = e.v
                         break
 
@@ -262,6 +263,7 @@ class TraceList:
                     continue
 
                 next = tree.add_vertex(eo.name, eo.variables)
+
                 tree.add_edge(current, next, ei.name, ei.variables)
 
                 current = next

@@ -85,7 +85,7 @@ class PlantFiniteStateModel:
             next_state = None
 
             for e in edges:
-                if e.can_go(current_ein.variables, current_ein.name):
+                if e.can_go(current_ein.variables, current_ein.name) and e.to_state.output == current_eout.variables:
                     next_state = e.to_state
                     break
 

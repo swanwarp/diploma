@@ -36,7 +36,7 @@ def run_trace(trace: Trace, tree: Tree) -> bool:
     return True
 
 
-s = ["6"]
+s = ["39"]
 
 # for i in range(6, 7):
 #     s.append(str(i))
@@ -68,7 +68,7 @@ plant_tree.to_dot("ptree1")
 
 #print(tree)
 
-controller, plant = sat_from_tree(10, 0, 17, tree, plant_tree)
+controller, plant = sat_from_tree(10, 0, 20, tree, plant_tree)
 
 # for C in range(6, 11):
 #     controller, plant = sat_from_tree(C, 0, 0, tree, plant_tree)
@@ -85,17 +85,17 @@ controller, plant = sat_from_tree(10, 0, 17, tree, plant_tree)
 controller.to_dot("controller1")
 plant.to_dot("plant1")
 
-traces.new_counter()
-
-while traces.check_counter():
-    trace = traces.next_trace()
-    if not controller.run_trace(trace):
-        print()
-    else:
-        #print("success")
-        print()
-
-plant_traces.new_counter()
+# traces.new_counter()
+#
+# while traces.check_counter():
+#     trace = traces.next_trace()
+#     if not controller.run_trace(trace):
+#         print()
+#     else:
+#         #print("success")
+#         print()
+#
+# plant_traces.new_counter()
 
 if plant != None:
     while plant_traces.check_counter():
