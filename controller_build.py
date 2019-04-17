@@ -1,7 +1,44 @@
 from subprocess import run
+from tree import Tree
+from controller_model import ControllerFiniteStateModel, Rule, RuleType
+from plant_model import PlantFiniteStateModel
 
 
-def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple):
+class VariableCounter:
+    count = 0
+
+    def __init__(self):
+        self.count = 0
+
+    def add_variable(self) -> int:
+        self.count += 1
+        return self.count
+
+
+def sat_from_tree(C: int, K: int, S: int, controller_tree: Tree, plant_tree: Tree):
+    return sat(C, controller_tree.v_to_tuple(), controller_tree.e_to_tuple(), controller_tree.e_in(),
+               controller_tree.e_out(), controller_tree.g(), controller_tree.z(), K,
+               S, plant_tree.v_to_tuple(), plant_tree.e_to_tuple(), plant_tree.e_in(), plant_tree.g(), plant_tree.z())
+
+
+def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K: int,  # controller
+        S: int, V_plant: tuple, E_plant: tuple, E_in_plant: tuple, G_plant: tuple, O: tuple):  # plant
+    print(len(O))
+    # for v in V:
+    #     print(v)
+    #
+    # E_ = list(E)
+    # E_.sort(key=lambda x: x.u.i)
+    #
+    # for e in E_:
+    #     print(e)
+    #
+    # print(E_in)
+    # print(E_out)
+    #
+    # print(G)
+    # print(Z)
+
     lE_in = len(E_in)
     lE_out = len(E_out)
     lE = len(E)
@@ -12,76 +49,49 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple):
     for z in Z:
         lZ = max(lZ, len(z))
 
-    length = C * C * lE_in * lG + C * lV
-    cs = 0 * length + 1
-    ys = 1 * length + 1
-    d0s = 2 * length + 1
-    d1s = 3 * length + 1
-    os = 4 * length + 1
+    c = []
+    d0 = []
+    d1 = []
+    o = []
+    y = []
 
-    c = {}
-    d0 = {}
-    d1 = {}
-    o = {}
-    y = {}
-
-    c_to_ind = {}
-    o_to_ind = {}
-    y_to_ind = {}
-    d0_to_ind = {}
-    d1_to_ind = {}
+    counter = VariableCounter()
 
     for v in range(0, lV):
-        c.setdefault(v, {})
+        c.append([])
 
         for i in range(0, C):
-            c[v].setdefault(i, cs + i + v * C)
-            c_to_ind.setdefault(cs + i + v * C, (v, i))
+            c[v].append(counter.add_variable())
 
     for n in range(0, C):
-        d0.setdefault(n, {})
-        d1.setdefault(n, {})
+        d0.append([])
+        d1.append([])
 
         for i in range(0, lZ):
-            d0[n].setdefault(i, d0s + i + n * lZ)
-            d0_to_ind.setdefault(d0s + i + n * lZ, (n, i))
-
-            d1[n].setdefault(i, d1s + i + n * lZ)
-            d1_to_ind.setdefault(d1s + i + n * lZ, (n, i))
+            d0[n].append(counter.add_variable())
+            d1[n].append(counter.add_variable())
 
     for n in range(0, C):
-        o.setdefault(n, {})
+        o.append([])
 
         for i in range(0, lE_out):
-            o[n].setdefault(i, os + i + n * lE_out)
-            o_to_ind.setdefault(os + i + n * lE_out, (n, i))
+            o[n].append(counter.add_variable())
 
     for n1 in range(0, C):
-        y.setdefault(n1, {})
+        y.append([])
         for e in range(0, lE_in):
-            y[n1].setdefault(e, {})
+            y[n1].append([])
             for g in range(0, lG):
-                y[n1][e].setdefault(g, {})
+                y[n1][e].append([])
                 for n2 in range(0, C):
-                    y[n1][e][g].setdefault(n2, ys + n2 + g * C + e * lG * C + n1 * lE_in * lG * C)
-                    y_to_ind.setdefault(ys + n2 + g * C + e * lG * C + n1 * lE_in * lG * C, (n1, e, g, n2))
+                    y[n1][e][g].append(counter.add_variable())
 
     clauses = list()
 
     # section 1 --------------------------------------------------------------------------------------------------------
 
-    root_node = -1
-
-    # search root's index
-    for i in range(0, lV):
-        if V[i].e_out == "":
-            root_node = i
-            break
-
-    V[root_node].z = tuple(map(lambda _: 0, range(0, lZ)))
-
     # 1.1
-    clauses.append([c[root_node][0]])
+    clauses.append([c[0][0]])
 
     # 1.2
     for i in range(0, lZ):
@@ -105,33 +115,60 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple):
 
     # 2.2
     for v in range(0, lV):
-        for n1 in range(0, C - 1):
-            for n2 in range(n1 + 1, C):
+        for n1 in range(0, C):
+            for n2 in range(0, C):
+                if n1 == n2:
+                    continue
+
                 clauses.append([-c[v][n1], -c[v][n2]])
 
     # section 3 --------------------------------------------------------------------------------------------------------
 
     # 3.1
     for e in E:
-        u = e.u
-        v = e.v
+        u = e.u.i
+        v = e.v.i
+        e_in = E_in.index(e.e_in)
+        g = G.index(e.x)
+
+        # print(e)
+        # print((u, v, e_in, g))
+
         for n1 in range(0, C):
             for n2 in range(0, C):
-                clauses.append([-c[V.index(u)][n1], -c[V.index(v)][n2], y[n1][E_in.index(e.e_in)][G.index(e.x)][n2]])
+                clauses.append([-c[u][n1], -c[v][n2], y[n1][e_in][g][n2]])
 
     # 3.2
     for n1 in range(0, C):
-        for n2 in range(n1, C):
-            for n3 in range(n2 + 1, C):
+        for n2 in range(0, C):
+            for n3 in range(0, C):
+                if n2 == n3:
+                    continue
+
                 for e in range(0, lE_in):
                     for g in range(0, lG):
                         clauses.append([-y[n1][e][g][n2], -y[n1][e][g][n3]])
+
+    # each state has at least one from-edge
+
+    # for n1 in range(1, C):
+    #     temp = []
+    #
+    #     for e in range(0, lE_in):
+    #         for g in range(0, lG):
+    #             for n2 in range(1, C):
+    #                 if n1 == n2:
+    #                     continue
+    #
+    #                 temp.append(y[n1][e][g][n2])
+    #
+    #     clauses.append(temp)
 
     # section 4 --------------------------------------------------------------------------------------------------------
 
     # 4.1
     for v in V:
-        if v.e_out is "":
+        if v == V[0]:
             continue
 
         for n in range(0, C):
@@ -148,8 +185,11 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple):
 
     # 4.3
     for n in range(0, C):
-        for j1 in range(0, lE_out - 1):
-            for j2 in range(j1 + 1, lE_out):
+        for j1 in range(0, lE_out):
+            for j2 in range(0, lE_out):
+                if j1 == j2:
+                    continue
+
                 clauses.append([-o[n][j1], -o[n][j2]])
 
     # section 5 --------------------------------------------------------------------------------------------------------
@@ -158,29 +198,205 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple):
     for e in E:
         u = e.u
         v = e.v
-        u_i = V.index(u)
         v_i = V.index(v)
 
         for n in range(0, C):
             for i in range(0, lZ):
-                if V[u_i].z[i] == 1 and V[v_i].z[i] == 1:
+                if u.z[i] == 0 and v.z[i] == 0:
                     clauses.append([-c[v_i][n], -d0[n][i]])
 
-                if V[u_i].z[i] == 1 and V[v_i].z[i] == 0:
+                if u.z[i] == 0 and v.z[i] == 1:
                     clauses.append([-c[v_i][n], d0[n][i]])
 
-                if V[u_i].z[i] == 0 and V[v_i].z[i] == 1:
+                if u.z[i] == 1 and v.z[i] == 0:
                     clauses.append([-c[v_i][n], -d1[n][i]])
 
-                if V[u_i].z[i] == 0 and V[v_i].z[i] == 0:
+                if u.z[i] == 1 and v.z[i] == 1:
                     clauses.append([-c[v_i][n], d1[n][i]])
+
+    # добавил, чтобы исключить One и Zero из правил
+
+    # for n in range(1, C):
+    #     for i in range(0, lZ):
+    #         clauses.append([-d0[n][i], -d1[n][i]])
+    #         clauses.append([d0[n][i], d1[n][i]])
+
+    # section 6 --------------------------------------------------------------------------------------------------------
+
+    if K != 0:
+        gamma = {}
+        dzetha = {}
+
+        for n1 in range(0, C):
+            dzetha.setdefault(n1, {})
+
+            for n2 in range(0, C):
+                index = counter.add_variable()
+                dzetha[n1].setdefault(n2, index)
+
+        for n1 in range(0, C):
+            gamma.setdefault(n1, {})
+
+            for n2 in range(0, C):
+                gamma[n1].setdefault(n2, {})
+
+                for k in range(0, C):
+                    index = counter.add_variable()
+                    gamma[n1][n2].setdefault(k, index)
+
+        # 6.1
+        for n1 in range(0, C):
+            for n2 in range(0, C):
+                temp = [dzetha[n1][n2]]
+
+                for e in range(0, lE_in):
+                    for g in range(0, lG):
+                        clauses.append([-dzetha[n1][n2], y[n1][e][g][n2]])
+                        temp.append(-y[n1][e][g][n2])
+
+                clauses.append(temp)
+
+        # 6.2
+        temp = []
+
+        for n in range(0, C):
+            temp.append(gamma[n][1][0])
+
+        clauses.append(temp)
+
+        # 6.3
+        for n1 in range(0, C):
+            for n2 in range(1, C):
+                for k in range(0, C - 1):
+                    clauses.append([-gamma[n1][n2 - 1][k], -dzetha[n1][n2], gamma[n1][n2][k + 1]])
+
+        # 6.4
+        for n1 in range(0, C):
+            for n2 in range(1, C):
+                for k in range(0, C):
+                    clauses.append([-gamma[n1][n2 - 1][k], dzetha[n1][n2], gamma[n1][n2][k]])
+
+        # 6.5
+        for n in range(0, C):
+            for k in range(K + 1, C):
+                clauses.append([gamma[n][C - 1][k]])
+
+    # plant section ----------------------------------------------------------------------------------------------------
+
+    if S != 0:
+
+        # for v in V_plant:
+        #     print(v)
+
+        x = []
+        yp = []
+        zp = []
+
+        for v in range(0, len(V_plant)):
+            x.append([])
+
+            for s in range(0, S):
+                x[v].append(counter.add_variable())
+
+        for s1 in range(0, S):
+            yp.append([])
+
+            for i in range(0, len(E_in_plant)):
+                yp[s1].append([])
+
+                for g in range(0, len(G_plant)):
+                    yp[s1][i].append([])
+
+                    for s2 in range(0, S):
+                        yp[s1][i][g].append(counter.add_variable())
+
+        for s in range(0, S):
+            zp.append([])
+
+            for eo in range(0, len(O)):
+                zp[s].append(counter.add_variable())
+
+        # root has color 0
+
+        clauses.append([x[0][0]])
+
+        # section 1 ----------------------------------------------------------------------------------------------------
+
+        for v in range(0, len(V_plant)):
+            temp = []
+
+            for s in range(0, S):
+                temp.append(x[v][s])
+
+            clauses.append(temp)
+
+        for v in range(0, len(V_plant)):
+            for s1 in range(0, S):
+                for s2 in range(0, S):
+                    if s1 == s2:
+                        continue
+
+                    clauses.append([-x[v][s1], -x[v][s2]])
+
+        # section 2 ----------------------------------------------------------------------------------------------------
+
+        for e in E_plant:
+            u = e.u
+            v = e.v
+            ei = E_in_plant.index(e.e_in)
+            gi = G_plant.index(e.x)
+
+            for s1 in range(0, S):
+                for s2 in range(0, S):
+                    clauses.append([-x[u.i][s1], -x[v.i][s2], yp[s1][ei][gi][s2]])
+
+        for s1 in range(0, S):
+            for s2 in range(0, S):
+                for s3 in range(0, S):
+                    if s2 == s3:
+                        continue
+
+                    for ei in range(0, len(E_in_plant)):
+                        for gi in range(0, len(G_plant)):
+                            clauses.append([-yp[s1][ei][gi][s2], -yp[s1][ei][gi][s3]])
+
+        # section 3 ----------------------------------------------------------------------------------------------------
+
+        for v in V_plant:
+            vi = V_plant.index(v)
+
+            oi = O.index(v.z)
+
+            for s in range(0, S):
+                clauses.append([-x[vi][s], zp[s][oi]])
+
+                for eo in range(0, len(O)):
+                    if eo == oi:
+                        continue
+
+                    clauses.append([-x[vi][s], -zp[s][eo]])
+
+        # section 4 ----------------------------------------------------------------------------------------------------
+
+        for s1 in range(0, S):
+            temp = []
+
+            for ei in range(0, len(E_in_plant)):
+                for gi in range(0, len(G_plant)):
+                    for s2 in range(0, S):
+                        if s1 == s2:
+                            continue
+
+                        temp.append(yp[s1][ei][gi][s2])
+
+            clauses.append(temp)
 
     # run sat-solver ---------------------------------------------------------------------------------------------------
 
     inp = open("example.in", "w")
 
     inp.write("p cnf ")
-    inp.write(str(length * 5))
+    inp.write(str(counter.count + 1))
     inp.write(" " + str(len(clauses)) + "\n")
 
     for css in clauses:
@@ -193,13 +409,14 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple):
 
     inp = open("example.out", "w")
     compl = run(".\cms.exe --verb 0 example.in", shell=True, stdout=inp)
+    #compl = run("./cms-linux --verb 0 example.in", shell=True, stdout=inp)
     inp.close()
 
     inp = open("example.out", "r")
     res = inp.readline()
 
     if res != "s SATISFIABLE\n":
-        return None
+        return [None, None]
 
     lines = inp.readlines()
 
@@ -213,131 +430,135 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple):
 
         result += list(map(lambda x: int(x), temp))
 
+    # building controller automaton ------------------------------------------------------------------------------------
+
     colors = []
 
-    for i in range(0, length):
-        if result[i] > 0:
-            colors.append(c_to_ind[result[i]])
+    for v in range(0, lV):
+        for i in range(0, C):
+            if result[c[v][i] - 1] > 0:
+                colors.append((v, i))
 
-    output = {}
+    #print(colors)
 
-    for i in range(os - 1, len(result)):
-        if result[i] > 0:
-            col, ev = o_to_ind[result[i]]
-            output.setdefault(col, ev)
+    output = []
 
-    y_out = {}
+    for n in range(1, C):
+        for i in range(0, lE_out):
+            if result[o[n][i] - 1] > 0:
+                output.append(i)
 
-    for i in range(ys - 1, d0s - 1):
-        if result[i] > 0:
-            n1, e, g, n2 = y_to_ind[result[i]]
-            y_out.setdefault((n1, n2), (E_in[e], G[g]))
+    #print(output)
 
-    model = FiniteStateModel()
+    y_out = []
+
+    for n1 in range(0, C):
+        for e in range(0, lE_in):
+            for g in range(0, lG):
+                for n2 in range(0, C):
+                    if result[y[n1][e][g][n2] - 1] > 0:
+                        y_out.append((n1, e, g, n2))
+
+    #print(y_out)
+
+    model = ControllerFiniteStateModel(lZ, lG)
 
     # building rules for each state
     rules = {}
 
     for n in range(0, C):
-        rules.setdefault(n, {})
+        types = []
 
         for i in range(0, lZ):
-            if result[d0s + i + n * lZ - 1] > 0:
-                rule0 = "0 -> 1"
+            if result[d0[n][i] - 1] > 0 and result[d1[n][i] - 1] > 0:
+                rule = RuleType.ONE
+            elif result[d0[n][i] - 1] < 0 and result[d1[n][i] - 1] > 0:
+                rule = RuleType.SELF
+            elif result[d0[n][i] - 1] > 0 and result[d1[n][i] - 1] < 0:
+                rule = RuleType.NEGATE
             else:
-                rule0 = "0 -> 0"
+                rule = RuleType.ZERO
 
-            if result[d1s + i + n * lZ - 1] > 0:
-                rule1 = "1 -> 1"
-            else:
-                rule1 = "1 -> 0"
+            types.append(rule)
 
-            rules[n].setdefault(i, "(" + rule0 + ", " + rule1 + ")")
+        rules.setdefault(n, Rule(tuple(types)))
 
     # building states
     states = {0: model.add_state("", rules[0], 0)}
 
     for i in range(1, C):
-        states.setdefault(i, model.add_state(E_out[output[i]], rules[i], i))
+        states.setdefault(i, model.add_state(E_out[output[i - 1]], rules[i], i))
 
     # building edges
-    for n1, n2 in y_out.keys():
-        (e, g) = y_out.get((n1, n2))
+    for (n1, e, g, n2) in y_out:
+        model.add_edge(E_in[e], G[g], states[n1], states[n2])
 
-        model.add_edge(e, g, states[n1], states[n2])
+    # building plant automaton -----------------------------------------------------------------------------------------
+    if S != 0:
+        p_colors = []
 
-    return model
+        for v in range(0, len(V_plant)):
+            for i in range(0, S):
+                if result[x[v][i] - 1] > 0:
+                    p_colors.append((v, i))
 
+        # for i in x_to_ind.keys():
+        #     if result[i - 1] > 0:
+        #         p_colors.append(x_to_ind[result[i - 1]])
 
-class State:
-    output = None
-    rules = {}
-    color = None
+        p_output = []
 
-    def __init__(self, output: str, rules: {}, color: int):
-        self.output = output
-        self.rules = rules
-        self.color = color
+        for n in range(0, S):
+            for i in range(0, len(O)):
+                if result[zp[n][i] - 1] > 0:
+                    p_output.append(i)
 
-    def __eq__(self, other):
-        return self.color == other.color
+        # for i in zp_to_ind.keys():
+        #     if result[i - 1] > 0:
+        #         col, ev = zp_to_ind[result[i - 1]]
+        #         p_output.setdefault(col, ev)
 
-    def __hash__(self):
-        return self.color.__hash__()
+        p_y_out = []
 
-    def __str__(self):
-        s = "Vertex " + str(self.color) + "\noutput: " + self.output + "\n"
+        for n1 in range(0, S):
+            for e in range(0, len(E_in_plant)):
+                for g in range(0, len(G_plant)):
+                    for n2 in range(0, S):
+                        if result[yp[n1][e][g][n2] - 1] > 0:
+                            p_y_out.append((n1, e, g, n2))
 
-        for zi in self.rules.keys():
-            s += "z" + str(zi) + ": " + self.rules[zi] + "\n"
+        # for n1 in range(0, S):
+        #     for n2 in range(0, S):
+        #         p_y_out.setdefault((n1, n2), [])
+        #
+        # for i in yp_to_ind.keys():
+        #     if result[i - 1] > 0:
+        #         n1, n2, inp = yp_to_ind[result[i - 1]]
+        #
+        #         p_y_out[(n1, n2)].append(I[inp])
 
-        return s
+        pZ = 0
 
+        for e in O:
+            pZ = max(len(e), pZ)
 
-class Edge:
-    input = None
-    guard = None
-    from_state = None
-    to_state = None
+        pX = 0
 
-    def __init__(self, inp: str, guard: tuple, from_state: State, to_state: State):
-        self.input = inp
-        self.guard = guard
-        self.from_state = from_state
-        self.to_state = to_state
+        for g in G_plant:
+            pX = max(len(g), pX)
 
-    def __str__(self):
-        return "Edge " + str(self.from_state.color) + " -> " + str(self.to_state.color) + " | " + self.input + str(self.guard)
+        plant = PlantFiniteStateModel(pZ, pX)
 
+        #building states
+        states = {}
 
-class FiniteStateModel:
-    V = set()
-    E = set()
+        for i in range(0, S):
+            states.setdefault(i, plant.add_state(O[p_output[i]], i))
 
-    def __init__(self):
-        self.V = set()
-        self.E = set()
+        # building edges
+        for n1, e, g, n2 in p_y_out:
+            plant.add_edge(E_in_plant[e], G_plant[g], states[n1], states[n2])
+    else:
+        plant = None
 
-    def add_state(self, output: str, rules: {}, color: int) -> State:
-        s = State(output, rules, color)
-        self.V.add(s)
-
-        return s
-
-    def add_edge(self, inp: str, guard: tuple, from_state: State, to_state: State) -> Edge:
-        e = Edge(inp, guard, from_state, to_state)
-        self.E.add(e)
-
-        return e
-
-    def __str__(self):
-        sV = ""
-        sE = ""
-
-        for v in self.V:
-            sV += str(v) + "\n"
-
-        for e in self.E:
-            sE += str(e) + "\n"
-
-        return "V:\n" + sV + "\nE:\n" + sE
+    return [model, plant]

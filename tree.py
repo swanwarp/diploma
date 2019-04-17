@@ -3,13 +3,10 @@ class Node:
     e_out = None
     z = None
 
-    def __init__(self, e_out: str, z: tuple, i: int):
+    def __init__(self, e_out: str, z: list, i: int):
         self.e_out = e_out
         self.z = z
         self.i = i
-
-    def __hash__(self):
-        return (self.e_out, self.z, self.i).__hash__()
 
     def __eq__(self, other):
         return self.e_out == other.e_out and self.z == other.z and other.i == self.i
@@ -24,14 +21,11 @@ class Edge:
     u = None
     v = None
 
-    def __init__(self, e_in: str, x: tuple, u: Node, v: Node):
+    def __init__(self, e_in: str, x: list, u: Node, v: Node):
         self.e_in = e_in
         self.x = x
         self.u = u
         self.v = v
-
-    def __hash__(self):
-        return (self.e_in, self.x, self.u, self.v).__hash__()
 
     def __eq__(self, other):
         return self.e_in == other.e_in and self.x == other.x and self.u == other.u and self.v == other.v
@@ -41,64 +35,101 @@ class Edge:
 
 
 class Tree:
+    root = None
     V = list()
-    E = set()
+    E = list()
 
     def __init__(self):
-        E = set()
-        V = list()
+        self.E = list()
+        self.V = list()
+        self.root = Node("", list(), 0)
+        self.V.append(self.root)
 
-    def add_edge(self, u: Node, v: Node, e_in: str, x: tuple) -> Edge:
+    def add_edge(self, u: Node, v: Node, e_in: str, x: list) -> Edge:
         new = Edge(e_in, x, u, v)
-        self.E.add(new)
+
+        for e in self.E:
+            if e.e_in == e_in and e.x == x and u == e.u and v == e.v:
+                return e
+
+        self.E.append(new)
         return new
 
-    def add_vertex(self, e_out: str, z: tuple) -> Node:
+    def add_vertex(self, e_out: str, z: list) -> Node:
+        if len(self.root.z) < len(z):
+            self.root.z = list(map(lambda _: 0, range(0, len(z))))
+
         new = Node(e_out, z, len(self.V))
         self.V.append(new)
         return new
 
     def e_to_tuple(self) -> tuple:
-        return tuple(self.E)
+        E_ = list(self.E)
+        E_.sort(key=lambda x: x.u.i)
+
+        return tuple(E_)
 
     def v_to_tuple(self) -> tuple:
-        return tuple(self.V)
+        V_ = list(self.V)
+        V_.sort(key=lambda x: x.i)
+
+        return tuple(V_)
 
     def z(self) -> tuple:
-        Z = set()
+        Z = list()
 
         for v in self.V:
-            if v.e_out == "":
-                continue
+            flag = False
 
-            Z.add(v.z)
+            for z in Z:
+                if v.z == z:
+                    flag = True
+                    break
 
-        Z = tuple(Z)
+            if not flag:
+                Z.append(v.z)
 
-        Z_map = {}
+        # print(Z)
 
-        for v in self.V:
-            if v.e_out == "":
-                continue
+        Z.sort()
 
-            Z_map.setdefault(v, Z.index(v.z))
+        return tuple(Z)
 
-        return Z
+    def e_g(self) -> tuple:
+        EG = list()
+
+        for e in self.E:
+            flag = False
+
+            for (e_in, g) in EG:
+                if e.x == g and e.e_in == e_in:
+                    flag = True
+                    break
+
+            if not flag:
+                EG.append((e.e_in, e.x))
+
+        return tuple(EG)
 
     def g(self) -> tuple:
-        G = set()
+        G = list()
 
         for e in self.E:
-            G.add(e.x)
+            flag = False
 
-        G = tuple(G)
+            for g in G:
+                if e.x == g:
+                    flag = True
+                    break
 
-        G_map = {}
+            if not flag:
+                G.append(e.x)
 
-        for e in self.E:
-            G_map.setdefault((e.u, e.v), G.index(e.x))
+        G.sort()
 
-        return G
+        #print(G)
+
+        return tuple(G)
 
     def e_in(self) -> tuple:
         E_in = set()
@@ -108,31 +139,15 @@ class Tree:
 
         E_in = tuple(E_in)
 
-        E_map = {}
-
-        for e in self.E:
-            E_map.setdefault((e.u, e.v), E_in.index(e.e_in))
-
         return E_in
 
     def e_out(self) -> tuple:
         E_out = set()
 
         for v in self.V:
-            if v.e_out == "":
-                continue
-
             E_out.add(v.e_out)
 
         E_out = tuple(E_out)
-
-        E_map = {}
-
-        for v in self.V:
-            if v.e_out == "":
-                continue
-
-            E_map.setdefault(v, E_out.index(v.e_out))
 
         return E_out
 
@@ -147,6 +162,46 @@ class Tree:
             sE += str(e) + "\n"
 
         return "V:\n" + sV + "\nE:\n" + sE
+
+    def to_dot(self, name: str):
+        inp = open(name + ".gv", "w")
+        inp.write("digraph t {\n")
+
+        for v in self.V:
+            s = ""
+
+            if v == self.root:
+                s += "root"
+            else:
+                s += v.e_out + str(v.i)
+
+            s += " [label = \"" + v.e_out + str(v.z) + "\"];\n"
+
+            inp.write(s)
+
+        for e in self.E:
+            u = e.u
+            v = e.v
+
+            if u == self.root:
+                s = "root -> "
+            else:
+                s = u.e_out + str(u.i) + " -> "
+
+            s += v.e_out + str(v.i) + " [label = \"" + str(e.x) + "\"];\n"
+            inp.write(s)
+
+        inp.write("}")
+        inp.close()
+
+    def edges_from(self, v: Node) -> list:
+        ret = []
+
+        for e in self.E:
+            if e.u == v:
+                ret.append(e)
+
+        return ret
 
 
 class LinkedNode:
@@ -220,3 +275,7 @@ def to_tree(tree: LinkedNode) -> Tree:
         current = new_current
 
     return ret
+
+
+
+
