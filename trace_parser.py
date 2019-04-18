@@ -238,11 +238,25 @@ class TraceList:
 
     def build_tree(self) -> Tree:
         tree = Tree()
+        roots = []
 
         for trace in self.__traces:
             trace.new_counter()
 
-            current = tree.root
+            if trace.plant_root() is None:
+                current = tree.root
+            else:
+                current = None
+                p_root = trace.plant_root()
+
+                for root in roots:
+                    if root.z == p_root.variables and root.e_out == p_root.name:
+                        current = root
+                        break
+
+                if current is None:
+                    current = tree.add_vertex(p_root.name, p_root.variables)
+                    roots.append(current)
 
             while trace.check_counter():
                 (ei, eo) = trace.next_event()
@@ -267,5 +281,21 @@ class TraceList:
                 tree.add_edge(current, next, ei.name, ei.variables)
 
                 current = next
+
+        if len(roots) > 0:
+            root_has_edges = False
+
+            for e in tree.E:
+                if e.u == tree.root:
+                    roots.append(tree.root)
+                    root_has_edges = True
+
+            if not root_has_edges:
+                tree.V.pop(0)
+
+                for v in tree.V:
+                    v.i -= 1
+
+            tree.root = roots
 
         return tree

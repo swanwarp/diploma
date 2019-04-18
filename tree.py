@@ -194,6 +194,31 @@ class Tree:
         inp.write("}")
         inp.close()
 
+    def p_to_dot(self, name: str):
+        inp = open(name + ".gv", "w")
+        inp.write("digraph t {\n")
+
+        for v in self.V:
+            s = ""
+
+            s += v.e_out + str(v.i)
+
+            s += " [label = \"" + v.e_out + str(v.i) + str(v.z) + "\"];\n"
+
+            inp.write(s)
+
+        for e in self.E:
+            u = e.u
+            v = e.v
+
+            s = u.e_out + str(u.i) + " -> "
+
+            s += v.e_out + str(v.i) + " [label = \"" + str(e.x) + "\"];\n"
+            inp.write(s)
+
+        inp.write("}")
+        inp.close()
+
     def edges_from(self, v: Node) -> list:
         ret = []
 

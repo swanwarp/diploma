@@ -64,11 +64,12 @@ plant_traces = TraceList(s, "pnp-traces", True)
 #print(plant_traces)
 
 plant_tree = plant_traces.build_tree()
-plant_tree.to_dot("ptree1")
+#print(plant_tree)
+plant_tree.p_to_dot("ptree1")
 
 #print(tree)
 
-controller, plant = sat_from_tree(10, 0, 20, tree, plant_tree)
+controller, plant = sat_from_tree(8, 0, len(plant_tree.z()), tree, plant_tree)
 
 # for C in range(6, 11):
 #     controller, plant = sat_from_tree(C, 0, 0, tree, plant_tree)

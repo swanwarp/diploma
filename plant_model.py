@@ -38,7 +38,7 @@ class Edge:
 
 
 class PlantFiniteStateModel:
-    root = None
+    root = list()
     V = set()
     E = set()
     Z_size = 0
@@ -47,14 +47,19 @@ class PlantFiniteStateModel:
     def __init__(self, Z: int, X: int):
         self.V = set()
         self.E = set()
+        self.root = list()
         self.Z_size = Z
         self.X_size = X
 
+    def add_root(self, output: str, color: int) -> State:
+        r = self.add_state(output, color)
+
+        self.root.append(r)
+
+        return r
+
     def add_state(self, output: str, color: int) -> State:
         s = State(output, color)
-
-        if color == 0:
-            self.root = s
 
         self.V.add(s)
 
@@ -76,7 +81,22 @@ class PlantFiniteStateModel:
         return ret
 
     def run_trace(self, trace: Trace) -> bool:
-        current_state = self.root
+        roots = self.root
+
+        current_state = None
+
+        for r in roots:
+            if r.output == trace.plant_root().variables:
+                current_state = r
+                break
+
+        if current_state is None:
+            print("wrong trace root: " + str(trace.plant_root().variables) + "\ntree roots:")
+            for r in roots:
+                print(r)
+
+            return False
+
         trace.new_counter()
 
         while trace.check_counter():
@@ -108,10 +128,7 @@ class PlantFiniteStateModel:
         for v in self.V:
             s = ""
 
-            if v == self.root:
-                s += "root"
-            else:
-                s += str(v.color)
+            s += str(v.color)
 
             s += " [label = \"" + str(v.color) + str(v.output) + "\"];\n"
 
@@ -121,15 +138,10 @@ class PlantFiniteStateModel:
             u = e.from_state
             v = e.to_state
 
-            if u == self.root:
-                s = "root -> "
-            else:
-                s = str(u.color) + " -> "
+            s = str(u.color) + " -> "
 
-            if v == self.root:
-                s += "root [label = \"" + e.guard.to_str() + "\"];\n"
-            else:
-                s += str(v.color) + " [label = \"" + e.guard.to_str() + "\"];\n"
+            s += str(v.color) + " [label = \"" + e.guard.to_str() + "\"];\n"
+
             inp.write(s)
 
         inp.write("}")

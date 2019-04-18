@@ -18,11 +18,11 @@ class VariableCounter:
 def sat_from_tree(C: int, K: int, S: int, controller_tree: Tree, plant_tree: Tree):
     return sat(C, controller_tree.v_to_tuple(), controller_tree.e_to_tuple(), controller_tree.e_in(),
                controller_tree.e_out(), controller_tree.g(), controller_tree.z(), K,
-               S, plant_tree.v_to_tuple(), plant_tree.e_to_tuple(), plant_tree.e_in(), plant_tree.g(), plant_tree.z())
+               S, plant_tree.v_to_tuple(), plant_tree.e_to_tuple(), plant_tree.e_in(), plant_tree.g(), plant_tree.z(), plant_tree.root)
 
 
 def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K: int,  # controller
-        S: int, V_plant: tuple, E_plant: tuple, E_in_plant: tuple, G_plant: tuple, O: tuple):  # plant
+        S: int, V_plant: tuple, E_plant: tuple, E_in_plant: tuple, G_plant: tuple, O: tuple, p_roots: list):  # plant
     print(len(O))
     print(len(G_plant))
     # for v in V:
@@ -319,7 +319,7 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K:
 
         # root has color 0
 
-        clauses.append([x[0][0]])
+        # clauses.append([x[0][0]])
 
         # section 1 ----------------------------------------------------------------------------------------------------
 
@@ -528,16 +528,6 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K:
                         if result[yp[n1][e][g][n2] - 1] > 0:
                             p_y_out.append((n1, e, g, n2))
 
-        # for n1 in range(0, S):
-        #     for n2 in range(0, S):
-        #         p_y_out.setdefault((n1, n2), [])
-        #
-        # for i in yp_to_ind.keys():
-        #     if result[i - 1] > 0:
-        #         n1, n2, inp = yp_to_ind[result[i - 1]]
-        #
-        #         p_y_out[(n1, n2)].append(I[inp])
-
         pZ = 0
 
         for e in O:
@@ -551,10 +541,13 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K:
         plant = PlantFiniteStateModel(pZ, pX)
 
         #building states
-        states = {}
+        states = []
 
         for i in range(0, S):
-            states.setdefault(i, plant.add_state(O[p_output[i]], i))
+            if any(r.z == O[p_output[i]] for r in p_roots):
+                states.append(plant.add_root(O[p_output[i]], i)) # adding verticle in roots if it was root in tree
+            else:
+                states.append(plant.add_state(O[p_output[i]], i))
 
         # building edges
         for n1, e, g, n2 in p_y_out:
