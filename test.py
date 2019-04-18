@@ -63,7 +63,7 @@ plant_traces = TraceList(s, "pnp-traces", True)
 
 #print(plant_traces)
 
-plant_tree = plant_traces.build_tree()
+plant_tree = plant_traces.build_plant_tree([6, 7, 8]) # skip pp1, pp2, pp3
 #print(plant_tree)
 plant_tree.p_to_dot("ptree1")
 
@@ -101,7 +101,7 @@ plant.to_dot("plant1")
 if plant != None:
     while plant_traces.check_counter():
         trace = plant_traces.next_trace()
-        if not plant.run_trace(trace):
+        if not plant.run_trace(trace, [6, 7, 8]):
             print()
         else:
             print("success")

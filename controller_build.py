@@ -23,26 +23,9 @@ def sat_from_tree(C: int, K: int, S: int, controller_tree: Tree, plant_tree: Tre
 
 def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K: int,  # controller
         S: int, V_plant: tuple, E_plant: tuple, E_in_plant: tuple, G_plant: tuple, O: tuple, p_roots: list):  # plant
-    print(len(O))
-    print(len(G_plant))
-    # for v in V:
-    #     print(v)
-    #
-    # E_ = list(E)
-    # E_.sort(key=lambda x: x.u.i)
-    #
-    # for e in E_:
-    #     print(e)
-    #
-    # print(E_in)
-    # print(E_out)
-    #
-    # print(G)
-    # print(Z)
 
     lE_in = len(E_in)
     lE_out = len(E_out)
-    lE = len(E)
     lV = len(V)
     lG = len(G)
     lZ = 0

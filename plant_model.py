@@ -17,7 +17,7 @@ class State:
         return self.color.__hash__()
 
     def __str__(self):
-        return "Vertex " + str(self.color) + "\noutput: " + self.output
+        return "Vertex " + str(self.color) + "\noutput: " + str(self.output)
 
 
 class Edge:
@@ -80,18 +80,30 @@ class PlantFiniteStateModel:
 
         return ret
 
-    def run_trace(self, trace: Trace) -> bool:
+    @staticmethod
+    def __skip(l: list, s: list) -> list:
+        ret = []
+
+        for i in range(0, len(l)):
+            if i not in s:
+                ret.append(l[i])
+
+        return ret
+
+    def run_trace(self, trace: Trace, skip_list: list) -> bool:
         roots = self.root
 
         current_state = None
 
+        t_root_vars = PlantFiniteStateModel.__skip(trace.plant_root().variables, skip_list)
+
         for r in roots:
-            if r.output == trace.plant_root().variables:
+            if r.output == t_root_vars:
                 current_state = r
                 break
 
         if current_state is None:
-            print("wrong trace root: " + str(trace.plant_root().variables) + "\ntree roots:")
+            print("wrong trace root: " + str(t_root_vars) + "\ntree roots:")
             for r in roots:
                 print(r)
 
@@ -104,16 +116,18 @@ class PlantFiniteStateModel:
             edges = self.__edges_from(current_state)
             next_state = None
 
+            eo_vars = PlantFiniteStateModel.__skip(current_eout.variables, skip_list)
+
             for e in edges:
-                if e.can_go(current_ein.variables, current_ein.name) and e.to_state.output == current_eout.variables:
+                if e.can_go(current_ein.variables, current_ein.name) and e.to_state.output == eo_vars:
                     next_state = e.to_state
                     break
 
-            if next_state is None or next_state.output != current_eout.variables:
+            if next_state is None or next_state.output != eo_vars:
                 print("wrong state on edge " + str(current_ein) + " -> " + str(current_eout) + " of trace")
                 print(current_state.color)
                 print(next_state.output)
-                print(current_eout.variables)
+                print(eo_vars)
                 print(trace)
                 return False
 

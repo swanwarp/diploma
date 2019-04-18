@@ -300,7 +300,3 @@ def to_tree(tree: LinkedNode) -> Tree:
         current = new_current
 
     return ret
-
-
-
-

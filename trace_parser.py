@@ -238,37 +238,22 @@ class TraceList:
 
     def build_tree(self) -> Tree:
         tree = Tree()
-        roots = []
 
         for trace in self.__traces:
             trace.new_counter()
 
-            if trace.plant_root() is None:
-                current = tree.root
-            else:
-                current = None
-                p_root = trace.plant_root()
-
-                for root in roots:
-                    if root.z == p_root.variables and root.e_out == p_root.name:
-                        current = root
-                        break
-
-                if current is None:
-                    current = tree.add_vertex(p_root.name, p_root.variables)
-                    roots.append(current)
+            current = tree.root
 
             while trace.check_counter():
                 (ei, eo) = trace.next_event()
 
-                #print(ei)
-                #print(eo)
-
+                # print(ei)
+                # print(eo)
 
                 next = None
 
                 for e in tree.E:
-                    if e.u == current and e.e_in == ei.name and e.x == ei.variables and eo.name == e.v.e_out and eo.variables == e.v.z:
+                    if e.u == current and e.e_in == ei.name and e.x == ei.variables:
                         next = e.v
                         break
 
@@ -277,25 +262,77 @@ class TraceList:
                     continue
 
                 next = tree.add_vertex(eo.name, eo.variables)
+                tree.add_edge(current, next, ei.name, ei.variables)
+
+                current = next
+
+        return tree
+
+    def build_plant_tree(self, skip_list: list) -> Tree:
+        tree = Tree()
+        roots = []
+
+        for trace in self.__traces:
+            trace.new_counter()
+
+            current = None
+            p_root = trace.plant_root()
+
+            for root in roots:
+                if root.z == p_root.variables and root.e_out == p_root.name:
+                    current = root
+                    break
+
+            if current is None:
+                root_vars = []
+
+                for i in range(0, len(p_root.variables)):
+                    if i not in skip_list:
+                        root_vars.append(p_root.variables[i])
+
+                current = tree.add_vertex(p_root.name, root_vars)
+                roots.append(current)
+
+            while trace.check_counter():
+                (ei, eo) = trace.next_event()
+
+                eo_vars = []
+
+                for i in range(0, len(eo.variables)):
+                    if i not in skip_list:
+                        eo_vars.append(eo.variables[i])
+
+                next = None
+
+                for e in tree.E:
+                    if e.u == current and e.e_in == ei.name and e.x == ei.variables and eo_vars == e.v.z:
+                        next = e.v
+                        break
+
+                if next is not None:
+                    current = next
+                    continue
+
+                next = tree.add_vertex(eo.name, eo_vars)
 
                 tree.add_edge(current, next, ei.name, ei.variables)
 
                 current = next
 
-        if len(roots) > 0:
-            root_has_edges = False
+        root_has_edges = False
 
-            for e in tree.E:
-                if e.u == tree.root:
-                    roots.append(tree.root)
-                    root_has_edges = True
+        for e in tree.E:
+            if e.u == tree.root:
+                roots.append(tree.root)
+                root_has_edges = True
 
-            if not root_has_edges:
-                tree.V.pop(0)
+        if not root_has_edges:
+            tree.V.pop(0)
 
-                for v in tree.V:
-                    v.i -= 1
+            for v in tree.V:
+                v.i -= 1
 
-            tree.root = roots
+        tree.root = roots
 
         return tree
+
