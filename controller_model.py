@@ -1,5 +1,8 @@
 from enum import Enum
-from trace_parser import Trace
+from trace_parser import Trace, Event
+from tree import Tree
+from predicate import Predicate
+from util import colors
 
 
 class RuleType(Enum):
@@ -73,26 +76,26 @@ class Rule:
 
 
 class Guard:
-    __vars = ()
-    __event = ""
+    vars = ()
+    event = ""
 
     def check(self, variables: list, event: str) -> bool:
-        return self.__event == event and self.__vars == variables
+        return self.event == event and self.vars == variables
 
     def __init__(self, variables: list, event: str):
-        self.__vars = variables
-        self.__event = event
+        self.vars = variables
+        self.event = event
 
     def __str__(self):
-        s = self.__event + "["
+        s = self.event + "["
 
-        if self.__vars[0] == 0:
+        if self.vars[0] == 0:
             s += "-x0"
         else:
             s += "x0"
 
-        for xi in range(1, len(self.__vars)):
-            if self.__vars[xi] == 0:
+        for xi in range(1, len(self.vars)):
+            if self.vars[xi] == 0:
                 s += " /\\ -x" + str(xi)
             else:
                 s += " /\\ x" + str(xi)
@@ -102,15 +105,15 @@ class Guard:
         return s
 
     def to_str(self) -> str:
-        s = self.__event + "["
+        s = self.event + "["
 
-        if self.__vars[0] == 0:
+        if self.vars[0] == 0:
             s += "0"
         else:
             s += "1"
 
-        for xi in range(1, len(self.__vars)):
-            if self.__vars[xi] == 0:
+        for xi in range(1, len(self.vars)):
+            if self.vars[xi] == 0:
                 s += "0"
             else:
                 s += "1"
@@ -183,7 +186,7 @@ class ControllerFiniteStateModel:
 
         return s
 
-    def add_edge(self, inp: str, guard: tuple, from_state: State, to_state: State) -> Edge:
+    def add_edge(self, inp: str, guard: list, from_state: State, to_state: State) -> Edge:
         e = Edge(inp, guard, from_state, to_state)
         self.E.append(e)
 
@@ -197,6 +200,48 @@ class ControllerFiniteStateModel:
                 ret.append(e)
 
         return ret
+
+    def bfs_check(self, p: Predicate[State]) -> bool:
+        visited = list(map(lambda x: False, range(0, len(self.V))))
+        to_visit = [self.root]
+
+        while not all(visited):
+            next = []
+
+            for v in to_visit:
+                visited[v.color] = True
+
+                if not p.apply_to(v):
+                    return False
+
+                for e in self.__edges_from(v):
+                    if not visited[e.to_state.color] and e.to_state not in next:
+                        next.append(e.to_state)
+
+            to_visit = next
+
+        return True
+
+    def bfs(self, p: Predicate[State]) -> State:
+        visited = list(map(lambda x: False, range(0, len(self.V))))
+        to_visit = [self.root]
+
+        while not all(visited):
+            next = []
+
+            for v in to_visit:
+                visited[v.color] = True
+
+                if p.apply_to(v):
+                    return v
+
+                for e in self.__edges_from(v):
+                    if not visited[e.to_state.color] and e.to_state not in next:
+                        next.append(e.to_state)
+
+            to_visit = next
+
+        return None
 
     def run_trace(self, trace: Trace) -> bool:
         current_state = self.root
@@ -243,7 +288,7 @@ class ControllerFiniteStateModel:
             else:
                 s += v.output + str(v.color)
 
-            s += " [label = \"" + v.output + str(v.color) + "[" + v.rules.to_str() + "]\"];\n"
+            s += " [label = \"" + v.output + str(v.color) + "[" + v.rules.to_str() + "\", color = \"" + colors[v.color] + "\"];\n"
 
             inp.write(s)
 
@@ -262,6 +307,86 @@ class ControllerFiniteStateModel:
         inp.write("}")
         inp.close()
 
+    def generate_trace_tree(self, n: int) -> Tree:
+        tree = Tree()
+        to_walk = [(self.root, tuple(map(lambda x: 0, range(0, self.Z_size))), tree.root)]
+
+        for i in range(0, n):
+            next_walk = []
+
+            for (current_state, current_z, current_node) in to_walk:
+                edges = self.__edges_from(current_state)
+
+                for e in edges:
+                    next_state = e.to_state
+                    next_z = next_state.apply_rules(current_z)
+                    next_node = tree.add_vertex(next_state.output, next_z)
+
+                    tree.add_edge(current_node, next_node, e.guard.event, e.guard.vars)
+
+                    next_walk.append((next_state, next_z, next_node))
+
+            to_walk = next_walk
+
+        return tree
+
+    def continue_trace(self, trace: Trace, n: int) -> [Trace]:
+        ret_trace = Trace("", False, seq=trace)
+
+        current_state = self.root
+        current_z = tuple(map(lambda x: 0, range(0, self.Z_size)))
+        trace.new_counter()
+
+        while trace.check_counter():
+            (current_ein, current_eout) = trace.next_event()
+            edges = self.__edges_from(current_state)
+            next_state = None
+
+            for e in edges:
+                if e.can_go(current_ein.variables, current_ein.name):
+                    next_state = e.to_state
+                    break
+
+            next_z = next_state.apply_rules(current_z)
+
+            current_z = next_z
+            current_state = next_state
+
+        to_visit = [(current_state, current_z, ret_trace)]
+
+        for _ in range(0, n):
+            next_visit = []
+
+            for (state, z, t) in to_visit:
+                edges = self.__edges_from(state)
+
+                for e in edges:
+                    next_state = e.to_state
+                    next_z = next_state.apply_rules(z)
+                    next_trace = Trace("", False, seq=t)
+
+                    e_name = e.guard.event
+                    e_vars = e.guard.vars
+
+                    e_in = Event("", name=e_name, v=e_vars, t="in")
+
+                    e_name = next_state.output
+
+                    e_out = Event("", name=e_name, v=next_z, t="out")
+
+                    next_trace.append(e_in, e_out)
+
+                    next_visit.append((next_state, next_z, next_trace))
+
+            to_visit = next_visit
+
+        result = []
+
+        for (_, _, t) in to_visit:
+            result.append(t)
+
+        return result
+
     def __str__(self):
         sV = ""
         sE = ""
@@ -273,4 +398,5 @@ class ControllerFiniteStateModel:
             sE += str(e) + "\n"
 
         return "V:\n" + sV + "\nE:\n" + sE
+
 

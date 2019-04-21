@@ -2,17 +2,19 @@ class Node:
     i = None
     e_out = None
     z = None
+    last = False
 
-    def __init__(self, e_out: str, z: list, i: int):
+    def __init__(self, e_out: str, z: list, i: int, last=False):
         self.e_out = e_out
         self.z = z
         self.i = i
+        self.last = last
 
     def __eq__(self, other):
         return self.e_out == other.e_out and self.z == other.z and other.i == self.i
 
     def __str__(self):
-        return "out: " + self.e_out + " || z: " + str(self.z) + " || i: " + str(self.i)
+        return "out: " + self.e_out + " || z: " + str(self.z) + " || i: " + str(self.i) + " || is last: " + str(self.last)
 
 
 class Edge:
@@ -55,11 +57,11 @@ class Tree:
         self.E.append(new)
         return new
 
-    def add_vertex(self, e_out: str, z: list) -> Node:
+    def add_vertex(self, e_out: str, z: list, last=False) -> Node:
         if len(self.root.z) < len(z):
             self.root.z = list(map(lambda _: 0, range(0, len(z))))
 
-        new = Node(e_out, z, len(self.V))
+        new = Node(e_out, z, len(self.V), last=last)
         self.V.append(new)
         return new
 
@@ -188,7 +190,7 @@ class Tree:
             else:
                 s = u.e_out + str(u.i) + " -> "
 
-            s += v.e_out + str(v.i) + " [label = \"" + str(e.x) + "\"];\n"
+            s += v.e_out + str(v.i) + " [label = \"" + str(e.e_in) + str(e.x) + "\"];\n"
             inp.write(s)
 
         inp.write("}")
@@ -227,76 +229,3 @@ class Tree:
                 ret.append(e)
 
         return ret
-
-
-class LinkedNode:
-    root = None
-    links = None
-    e_out = None
-    z = None
-
-    def __init__(self, e_out: str, z: tuple):
-        self.e_out = e_out
-        self.z = z
-        self.links = {}
-
-    def set_root(self, v):
-        self.root = v
-
-    def add_link(self, e_in: str, x: [], v):
-        self.links.setdefault((e_in, str(x)), v)
-
-    def new_link(self, e_in: str, x: [], e_out: str, z: tuple):
-        new = LinkedNode(e_out, z)
-
-        self.add_link(e_in, x, new)
-
-        return new
-
-
-def from_str_to_arr(s: str) -> tuple:
-    ret = []
-
-    for i in s[1:-1].split(", "):
-        ret.append(int(i))
-
-    return tuple(ret)
-
-
-def to_tree(tree: LinkedNode) -> Tree:
-    ret = Tree()
-    current = [tree]
-    added = set()
-    m = {}
-
-    while len(current) != 0:
-        new_current = []
-
-        for node in current:
-            if node not in added:
-                added.add(node)
-                u = ret.add_vertex(node.e_out, node.z)
-                m.setdefault(node, u.i)
-            else:
-                u = ret.V[m[node]]
-
-            for (e_in, x) in node.links.keys():
-                to_node = node.links[(e_in, x)]
-
-                if node != to_node:
-                    new_current.append(to_node)
-
-                if to_node not in added:
-                    added.add(to_node)
-                    v = ret.add_vertex(to_node.e_out, to_node.z)
-                    m.setdefault(to_node, v.i)
-                else:
-                    v = ret.V[m[to_node]]
-
-                xa = from_str_to_arr(x)
-
-                ret.add_edge(u, v, e_in, xa)
-
-        current = new_current
-
-    return ret

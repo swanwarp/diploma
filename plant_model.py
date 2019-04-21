@@ -1,6 +1,7 @@
 from controller_model import Guard
+from predicate import Predicate
 from trace_parser import Trace
-
+from util import colors
 
 class State:
     output = None
@@ -24,14 +25,16 @@ class Edge:
     guard = None
     from_state = None
     to_state = None
+    color = 0
 
     def can_go(self, variables: list, event: str) -> bool:
         return self.guard.check(variables, event)
 
-    def __init__(self, inp: str, guard: list, from_state: State, to_state: State):
+    def __init__(self, inp: str, guard: list, from_state: State, to_state: State, color: int):
         self.guard = Guard(guard, inp)
         self.from_state = from_state
         self.to_state = to_state
+        self.color = color
 
     def __str__(self):
         return "Edge " + str(self.from_state.color) + " -> " + str(self.to_state.color) + " | " + str(self.guard)
@@ -65,8 +68,8 @@ class PlantFiniteStateModel:
 
         return s
 
-    def add_edge(self, inp: str, guard: list, from_state: State, to_state: State) -> Edge:
-        e = Edge(inp, guard, from_state, to_state)
+    def add_edge(self, inp: str, guard: list, from_state: State, to_state: State, color: int) -> Edge:
+        e = Edge(inp, guard, from_state, to_state, color)
         self.E.add(e)
 
         return e
@@ -79,6 +82,48 @@ class PlantFiniteStateModel:
                 ret.append(e)
 
         return ret
+
+    def bfs_check(self, p: Predicate[State]) -> bool:
+        visited = list(map(lambda x: False, range(0, len(self.V))))
+        to_visit = self.root
+
+        while not all(visited):
+            next = []
+
+            for v in to_visit:
+                visited[v.color] = True
+
+                if not p.apply_to(v):
+                    return False
+
+                for e in self.__edges_from(v):
+                    if not visited[e.to_state.color] and e.to_state not in next:
+                        next.append(e.to_state)
+
+            to_visit = next
+
+        return True
+
+    def bfs(self, p: Predicate[State]) -> State:
+        visited = list(map(lambda x: False, range(0, len(self.V))))
+        to_visit = self.root
+
+        while not all(visited):
+            next = []
+
+            for v in to_visit:
+                visited[v.color] = True
+
+                if p.apply_to(v):
+                    return v
+
+                for e in self.__edges_from(v):
+                    if not visited[e.to_state.color] and e.to_state not in next:
+                        next.append(e.to_state)
+
+            to_visit = next
+
+        return None
 
     @staticmethod
     def __skip(l: list, s: list) -> list:
@@ -154,7 +199,7 @@ class PlantFiniteStateModel:
 
             s = str(u.color) + " -> "
 
-            s += str(v.color) + " [label = \"" + e.guard.to_str() + "\"];\n"
+            s += str(v.color) + " [label = \"" + e.guard.to_str() + "\", color = \"" + colors[e.color] + "\"];\n"
 
             inp.write(s)
 

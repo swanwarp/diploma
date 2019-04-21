@@ -1,4 +1,6 @@
 from subprocess import run
+from tree import Tree
+from trace_parser import Trace
 
 
 def sat(E_in, E_out, Z, V, E, C, G):
@@ -200,3 +202,197 @@ def sat(E_in, E_out, Z, V, E, C, G):
 
     print(res)
     print(inp.readlines())
+
+
+class LinkedNode:
+    root = None
+    links = None
+    e_out = None
+    z = None
+
+    def __init__(self, e_out: str, z: tuple):
+        self.e_out = e_out
+        self.z = z
+        self.links = {}
+
+    def set_root(self, v):
+        self.root = v
+
+    def add_link(self, e_in: str, x: [], v):
+        self.links.setdefault((e_in, str(x)), v)
+
+    def new_link(self, e_in: str, x: [], e_out: str, z: tuple):
+        new = LinkedNode(e_out, z)
+
+        self.add_link(e_in, x, new)
+
+        return new
+
+
+def from_str_to_arr(s: str) -> tuple:
+    ret = []
+
+    for i in s[1:-1].split(", "):
+        ret.append(int(i))
+
+    return tuple(ret)
+
+
+def to_tree(tree: LinkedNode) -> Tree:
+    ret = Tree()
+    current = [tree]
+    added = set()
+    m = {}
+
+    while len(current) != 0:
+        new_current = []
+
+        for node in current:
+            if node not in added:
+                added.add(node)
+                u = ret.add_vertex(node.e_out, node.z)
+                m.setdefault(node, u.i)
+            else:
+                u = ret.V[m[node]]
+
+            for (e_in, x) in node.links.keys():
+                to_node = node.links[(e_in, x)]
+
+                if node != to_node:
+                    new_current.append(to_node)
+
+                if to_node not in added:
+                    added.add(to_node)
+                    v = ret.add_vertex(to_node.e_out, to_node.z)
+                    m.setdefault(to_node, v.i)
+                else:
+                    v = ret.V[m[to_node]]
+
+                xa = from_str_to_arr(x)
+
+                ret.add_edge(u, v, e_in, xa)
+
+        current = new_current
+
+    return ret
+
+
+def from_str(arr: str) -> tuple:
+    ret = []
+
+    for s in arr:
+        ret.append(int(s))
+
+    return tuple(ret)
+
+
+def build_controller_tree(traces: list, with_self_links: bool) -> LinkedNode:
+    root = LinkedNode("", tuple())
+    current = root
+
+    for trace in traces:
+        for t in trace:
+            if with_self_links:
+                for i in t["inp"][:-1]:
+                    current.add_link(i["name"], from_str(i["x"]), current)
+
+            if t["out"] is not None:
+                if current.links.get((t["inp"][-1]["name"], t["inp"][-1]["x"])) is None:
+                    current = current.new_link(t["inp"][-1]["name"], from_str(t["inp"][-1]["x"]),
+                                               t["out"]["name"], from_str(t["out"]["z"]))
+
+                    current.set_root(root)
+                else:
+                    current = current.links[(t["inp"][-1]["name"], t["inp"][-1]["x"])]
+            elif with_self_links:
+                current.add_link(t["inp"][-1]["name"], from_str(t["inp"][-1]["x"]), current)
+
+        current = root
+
+    return root
+
+
+def build_controller_from_names(names: list, with_self_links: bool) -> Tree:
+    traces = []
+
+    for name in names:
+        traces += read_traces(name)
+
+    return to_tree(build_controller_tree(traces, with_self_links))
+
+
+def read_traces(name: str):
+    inp = open("pnp-traces/" + name, "r")
+    res = []
+
+    for s in inp.readlines():
+        temp = s.split(" ")
+
+        if len(temp) == 1:
+            continue
+
+        trace = []
+
+        while len(temp) != 0:
+            obj = {
+                "inp": [],
+                "out": None,
+            }
+
+            t = temp.pop(0)
+
+            while t[0:3] != "out":
+                if t[0:2] == "in":
+                    t = t[3:]
+                    t = t.split("[")
+                    obj["inp"].append({"name": t[0], "x": t[1][0:-2]})
+
+                if len(temp) == 0:
+                    break
+
+                t = temp.pop(0)
+
+            if t[0:3] == "out":
+                t = t[4:]
+                t = t.split("[")
+
+                obj["out"] = {"name": t[0], "z": t[1].split("]")[0]}
+
+            trace.append(obj)
+
+        res.append(trace)
+
+    return res
+
+
+def run_trace(trace: Trace, tree: Tree) -> bool:
+    current_state = tree.root
+    trace.new_counter()
+
+    while trace.check_counter():
+        (current_ein, current_eout) = trace.next_event()
+        edges = tree.edges_from(current_state)
+        next_state = None
+
+        for e in edges:
+            if e.e_in == current_ein.name and e.x == current_ein.variables:
+                next_state = e.v
+                break
+
+        if next_state is None:
+            print("wrong state on edge " + str(current_ein) + " -> " + str(current_eout) + " of trace")
+            print(trace)
+            return False
+
+        next_z = next_state.z
+        if current_eout.variables != next_z:
+            print("wrong out on edge " + str(current_ein) + " -> " + str(current_eout) + " of trace")
+            print(next_z)
+            print(current_state.i)
+            print(trace)
+            return False
+
+        current_state = next_state
+
+    return True
+

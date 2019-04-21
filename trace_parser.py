@@ -1,94 +1,7 @@
-from tree import LinkedNode, to_tree, Tree
+from plant_tree import PlantTree
+from tree import Tree
 from enum import Enum
 from re import split
-
-
-def read_traces(name: str):
-    inp = open("pnp-traces/" + name, "r")
-    res = []
-
-    for s in inp.readlines():
-        temp = s.split(" ")
-
-        if len(temp) == 1:
-            continue
-
-        trace = []
-
-        while len(temp) != 0:
-            obj = {
-                "inp": [],
-                "out": None,
-            }
-
-            t = temp.pop(0)
-
-            while t[0:3] != "out":
-                if t[0:2] == "in":
-                    t = t[3:]
-                    t = t.split("[")
-                    obj["inp"].append({"name": t[0], "x": t[1][0:-2]})
-
-                if len(temp) == 0:
-                    break
-
-                t = temp.pop(0)
-
-            if t[0:3] == "out":
-                t = t[4:]
-                t = t.split("[")
-
-                obj["out"] = {"name": t[0], "z": t[1].split("]")[0]}
-
-            trace.append(obj)
-
-        res.append(trace)
-
-    return res
-
-
-def from_str(arr: str) -> tuple:
-    ret = []
-
-    for s in arr:
-        ret.append(int(s))
-
-    return tuple(ret)
-
-
-def build_controller_tree(traces: list, with_self_links: bool) -> LinkedNode:
-    root = LinkedNode("", tuple())
-    current = root
-
-    for trace in traces:
-        for t in trace:
-            if with_self_links:
-                for i in t["inp"][:-1]:
-                    current.add_link(i["name"], from_str(i["x"]), current)
-
-            if t["out"] is not None:
-                if current.links.get((t["inp"][-1]["name"], t["inp"][-1]["x"])) is None:
-                    current = current.new_link(t["inp"][-1]["name"], from_str(t["inp"][-1]["x"]),
-                                               t["out"]["name"], from_str(t["out"]["z"]))
-
-                    current.set_root(root)
-                else:
-                    current = current.links[(t["inp"][-1]["name"], t["inp"][-1]["x"])]
-            elif with_self_links:
-                current.add_link(t["inp"][-1]["name"], from_str(t["inp"][-1]["x"]), current)
-
-        current = root
-
-    return root
-
-
-def build_controller_from_names(names: list, with_self_links: bool) -> Tree:
-    traces = []
-
-    for name in names:
-        traces += read_traces(name)
-
-    return to_tree(build_controller_tree(traces, with_self_links))
 
 
 class EventType(Enum):
@@ -101,7 +14,16 @@ class Event:
     variables = []
     t = None
 
-    def __init__(self, s: str):
+    def __init__(self, s: str, name="", v=list(), t=""):
+        if name != "" and v != [] and t != "":
+            self.name = name
+            self.variables = v
+            if t == "in":
+                self.t = EventType.IN
+            else:
+                self.t = EventType.OUT
+            return
+
         temp = s
 
         if temp[0:3] == "out":
@@ -125,14 +47,23 @@ class Event:
     def __str__(self):
         return str(self.t.name) + " " + self.name + str(self.variables)
 
+    def __eq__(self, other):
+        return self.variables == other.variables and self.name == other.name and self.t == other.t
+
 
 class Trace:
     __sequence = []
     __counter = 0
     __plant_root = None
+    __controller_last = None
 
-    def __init__(self, trace: str, for_plant: bool):
+    def __init__(self, trace: str, seq=None):
         self.__counter = -1
+
+        if seq is not None:
+            self.__plant_root = seq.__plant_root
+            self.__sequence = list(seq.__sequence)
+            return
 
         s = split(" +", trace)
         sequence = []
@@ -140,41 +71,53 @@ class Trace:
         if s[len(s) - 1] == "":
             s.pop(len(s) - 1)
 
-        if not for_plant:
-            last = s.pop(0)
+        last = s.pop(0)
 
-            while len(s) != 0:
-                event = s.pop(0)
+        while len(s) != 0:
+            event = s.pop(0)
 
-                if event[0:3] == "out":
-                    sequence.append((Event(last), Event(event)))
+            if event[0:3] == "out":
+                sequence.append((Event(last), Event(event)))
 
-                last = event
-        else:
-            last = None
+            last = event
 
-            while not s[0][0:3] == "out":
-                last = s.pop(0)
-
-            self.__plant_root = Event(last)
-
-            while len(s) != 0:
-                last = s.pop(0)
-
-                if last[0:3] == "out":
-                    event = None
-
-                    while not s[0][0:3] == "out":
-                        event = s.pop(0)
-                        if len(s) == 0:
-                            break
-
-                    sequence.append((Event(last), Event(event)))
+            if len(s) == 0:
+                self.__controller_last = Event(last)
 
         self.__sequence = sequence
 
+    def transform(self):
+        self.__counter = -1
+
+        if self.__plant_root is not None:
+            new_seq = []
+            current_last = self.__plant_root
+
+            for (ei, eo) in self.__sequence:
+                new_seq.append((current_last, ei))
+                current_last = eo
+
+            self.__plant_root = None
+            self.__controller_last = current_last
+            self.__sequence = new_seq
+        elif self.__controller_last is not None:
+            new_seq = []
+            self.__plant_root = self.__sequence[0][0]
+            current_last = self.__sequence[0][1]
+
+            for (ei, eo) in self.__sequence[1:]:
+                new_seq.append((current_last, ei))
+                current_last = eo
+
+            new_seq.append((current_last, self.__controller_last))
+            self.__controller_last = None
+            self.__sequence = new_seq
+
     def plant_root(self) -> Event:
         return self.__plant_root
+
+    def controller_last(self) -> Event:
+        return self.__controller_last
 
     def new_counter(self):
         self.__counter = -1
@@ -185,6 +128,9 @@ class Trace:
 
     def check_counter(self) -> bool:
         return self.__counter < len(self.__sequence) - 1
+
+    def append(self, ein: Event, eout: Event):
+        self.__sequence.append((ein, eout))
 
     def __str__(self):
         s = ""
@@ -202,7 +148,12 @@ class TraceList:
     __traces = []
     __counter = -1
 
-    def __init__(self, files: list, location: str, for_plant: bool):
+    def __init__(self, files: list, location: str, old=None):
+        if old is not None:
+            self.__traces = list(old.__traces)
+            self.__counter = -1
+            return
+
         traces = []
         self.__counter = -1
 
@@ -214,7 +165,7 @@ class TraceList:
                 if s[-1] == "\n":
                     s = s[:-1]
 
-                traces.append(Trace(s, for_plant))
+                traces.append(Trace(s))
 
         self.__traces = traces
 
@@ -226,6 +177,9 @@ class TraceList:
 
         return s
 
+    def append(self, traces: [Trace]):
+        self.__traces += traces
+
     def new_counter(self):
         self.__counter = -1
 
@@ -235,6 +189,105 @@ class TraceList:
 
     def check_counter(self) -> bool:
         return self.__counter < len(self.__traces) - 1
+
+    def transform_all(self):
+        self.__counter = -1
+
+        for trace in self.__traces:
+            trace.transform()
+
+    def build_trees(self, skip_list: list) -> (Tree, PlantTree):
+        controller_tree = Tree()
+        plant_tree = PlantTree()
+
+        vertex_event = []
+
+        for trace in self.__traces:
+            trace.new_counter()
+
+            current = controller_tree.root
+
+            while trace.check_counter():
+                (ei, eo) = trace.next_event()
+
+                next = None
+
+                for e in controller_tree.E:
+                    if e.u == current and e.e_in == ei.name and e.x == ei.variables:
+                        next = e.v
+                        break
+
+                if next is not None:
+                    vertex_event.append((next, eo))
+                    current = next
+                    continue
+
+                next = controller_tree.add_vertex(eo.name, eo.variables, last=not trace.check_counter())
+
+                vertex_event.append((next, eo))
+
+                controller_tree.add_edge(current, next, ei.name, ei.variables)
+
+                current = next
+
+            trace.transform()
+
+            trace.new_counter()
+
+            current = None
+            p_root = trace.plant_root()
+
+            for root in plant_tree.root:
+                if root.z == p_root.variables and root.e_out == p_root.name:
+                    current = root
+                    break
+
+            if current is None:
+                root_vars = []
+
+                for i in range(0, len(p_root.variables)):
+                    if i not in skip_list:
+                        root_vars.append(p_root.variables[i])
+
+                current = plant_tree.add_vertex(p_root.name, root_vars)
+                plant_tree.root.append(current)
+
+            while trace.check_counter():
+                (ei, eo) = trace.next_event()
+
+                eo_vars = []
+
+                for i in range(0, len(eo.variables)):
+                    if i not in skip_list:
+                        eo_vars.append(eo.variables[i])
+
+                next = None
+
+                for e in plant_tree.E:
+                    if e.u == current and e.e_in == ei.name and e.x == ei.variables and eo_vars == e.v.z:
+                        next = e.v
+                        break
+
+                if next is not None:
+                    current = next
+                    continue
+
+                next = plant_tree.add_vertex(eo.name, eo_vars)
+
+                vert = None
+
+                for (v, e) in vertex_event:
+                    if ei == e:
+                        vert = v
+                        break
+
+                plant_tree.add_edge(current, next, ei.name, ei.variables, vert)
+
+                current = next
+
+            trace.transform()
+
+        return controller_tree, plant_tree
 
     def build_tree(self) -> Tree:
         tree = Tree()
@@ -261,7 +314,7 @@ class TraceList:
                     current = next
                     continue
 
-                next = tree.add_vertex(eo.name, eo.variables)
+                next = tree.add_vertex(eo.name, eo.variables, last=not trace.check_counter())
                 tree.add_edge(current, next, ei.name, ei.variables)
 
                 current = next

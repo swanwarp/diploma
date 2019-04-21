@@ -1,5 +1,6 @@
 from subprocess import run
 from tree import Tree
+from plant_tree import PlantTree
 from controller_model import ControllerFiniteStateModel, Rule, RuleType
 from plant_model import PlantFiniteStateModel
 
@@ -15,7 +16,7 @@ class VariableCounter:
         return self.count
 
 
-def sat_from_tree(C: int, K: int, S: int, controller_tree: Tree, plant_tree: Tree):
+def sat_from_tree(C: int, K: int, S: int, controller_tree: Tree, plant_tree: PlantTree):
     return sat(C, controller_tree.v_to_tuple(), controller_tree.e_to_tuple(), controller_tree.e_in(),
                controller_tree.e_out(), controller_tree.g(), controller_tree.z(), K,
                S, plant_tree.v_to_tuple(), plant_tree.e_to_tuple(), plant_tree.e_in(), plant_tree.g(), plant_tree.z(), plant_tree.root)
@@ -300,10 +301,6 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K:
             for eo in range(0, len(O)):
                 zp[s].append(counter.add_variable())
 
-        # root has color 0
-
-        # clauses.append([x[0][0]])
-
         # section 1 ----------------------------------------------------------------------------------------------------
 
         for v in range(0, len(V_plant)):
@@ -363,17 +360,18 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K:
         # section 4 ----------------------------------------------------------------------------------------------------
 
         for s1 in range(0, S):
-            temp = []
+            for e in E_plant:
+                temp = []
+                ei = E_in_plant.index(e.e_in)
+                gi = G_plant.index(e.x)
 
-            for ei in range(0, len(E_in_plant)):
-                for gi in range(0, len(G_plant)):
-                    for s2 in range(0, S):
-                        if s1 == s2:
-                            continue
+                for s2 in range(0, S):
+                    if s1 == s2:
+                        continue
 
-                        temp.append(yp[s1][ei][gi][s2])
+                    temp.append(yp[s1][ei][gi][s2])
 
-            clauses.append(temp)
+                clauses.append(temp)
 
     # run sat-solver ---------------------------------------------------------------------------------------------------
 
@@ -421,9 +419,7 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K:
     for v in range(0, lV):
         for i in range(0, C):
             if result[c[v][i] - 1] > 0:
-                colors.append((v, i))
-
-    #print(colors)
+                colors.append(i)
 
     output = []
 
@@ -473,6 +469,8 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K:
     for i in range(1, C):
         states.setdefault(i, model.add_state(E_out[output[i - 1]], rules[i], i))
 
+    # print(colors)
+
     # building edges
     for (n1, e, g, n2) in y_out:
         model.add_edge(E_in[e], G[g], states[n1], states[n2])
@@ -486,10 +484,6 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K:
                 if result[x[v][i] - 1] > 0:
                     p_colors.append((v, i))
 
-        # for i in x_to_ind.keys():
-        #     if result[i - 1] > 0:
-        #         p_colors.append(x_to_ind[result[i - 1]])
-
         p_output = []
 
         for n in range(0, S):
@@ -497,19 +491,15 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K:
                 if result[zp[n][i] - 1] > 0:
                     p_output.append(i)
 
-        # for i in zp_to_ind.keys():
-        #     if result[i - 1] > 0:
-        #         col, ev = zp_to_ind[result[i - 1]]
-        #         p_output.setdefault(col, ev)
-
         p_y_out = []
 
         for n1 in range(0, S):
-            for e in range(0, len(E_in_plant)):
-                for g in range(0, len(G_plant)):
-                    for n2 in range(0, S):
-                        if result[yp[n1][e][g][n2] - 1] > 0:
-                            p_y_out.append((n1, e, g, n2))
+            for e in E_plant:
+                ei = E_in_plant.index(e.e_in)
+                g = G_plant.index(e.x)
+                for n2 in range(0, S):
+                    if result[yp[n1][ei][g][n2] - 1] > 0:
+                        p_y_out.append((n1, e.e_in, e.x, n2, e.controller_node))
 
         pZ = 0
 
@@ -533,8 +523,8 @@ def sat(C, V: tuple, E: tuple, E_in: tuple, E_out: tuple, G: tuple, Z: tuple, K:
                 states.append(plant.add_state(O[p_output[i]], i))
 
         # building edges
-        for n1, e, g, n2 in p_y_out:
-            plant.add_edge(E_in_plant[e], G_plant[g], states[n1], states[n2])
+        for n1, e, g, n2, v in p_y_out:
+            plant.add_edge(e, g, states[n1], states[n2], colors[v.i])
     else:
         plant = None
 
